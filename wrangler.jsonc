@@ -1,0 +1,40 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "metavadvisors",
+	"compatibility_date": "2025-01-13",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "@tanstack/react-start/server-entry",
+	"observability": {
+		"enabled": true
+	},
+	// D1 Database binding
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "metavadvisors-db",
+			"database_id": "8e0291d7-4d7c-4328-b1ad-55bc5db6f22b",
+			"migrations_dir": "migrations"
+		}
+	],
+	// R2 Storage binding
+	"r2_buckets": [
+		{
+			"binding": "BUCKET",
+			"bucket_name": "metavadvisors-bucket"
+		}
+	],
+	// KV Namespace binding
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "26518db2e8d3496386c3eb446d0d4fee"
+		}
+	],
+	// Environment variables
+	"vars": {
+		"ENVIRONMENT": "development",
+		"DOMAIN": "metavadvisors.com"
+	}
+}
