@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import * as openclaw from '~/server/openclaw'
+import { getDB } from '~/utils/cloudflare'
 
 export const Route = createFileRoute('/api/metrics/$')({
   server: {
@@ -10,13 +11,33 @@ export const Route = createFileRoute('/api/metrics/$')({
 
         // Route based on path
         if (path === 'status') {
-          const [gateway, sessions] = await Promise.all([
-            openclaw.getGatewayStatus(),
-            openclaw.listSessions(),
-          ])
+          const gateway = await openclaw.getGatewayStatus()
+          
+          // Get task stats from D1 as activity proxy
+          let taskStats = { total: 0, pending: 0, completed: 0, failed: 0 }
+          try {
+            const db = getDB()
+            if (db) {
+              const rows = await db.prepare(
+                `SELECT status, COUNT(*) as count FROM tasks GROUP BY status`
+              ).all()
+              for (const r of rows.results as any[]) {
+                taskStats.total += r.count
+                if (r.status === 'pending') taskStats.pending = r.count
+                if (r.status === 'completed') taskStats.completed = r.count
+                if (r.status === 'failed') taskStats.failed = r.count
+              }
+            }
+          } catch {}
+
           return Response.json({
             gateway,
-            sessions,
+            sessions: {
+              activeSessions: gateway.ok ? 1 : 0,
+              totalSessions: gateway.ok ? 1 : 0,
+              totalTokens: 0,
+            },
+            tasks: taskStats,
             timestamp: Date.now(),
           })
         }
@@ -85,8 +106,17 @@ export const Route = createFileRoute('/api/metrics/$')({
 
         if (path === 'heartbeat') {
           try {
-            const result = await openclaw.triggerHeartbeat()
-            return Response.json(result)
+            const result = await openclaw.sendToMainSession('Trigger a heartbeat now. Run the cron wake tool with mode "now".')
+            return Response.json({ ok: true })
+          } catch (error) {
+            return Response.json({ error: String(error) }, { status: 500 })
+          }
+        }
+
+        if (path === 'restart') {
+          try {
+            const result = await openclaw.sendToMainSession('Restart the gateway now. Use the gateway restart tool.')
+            return Response.json({ ok: true })
           } catch (error) {
             return Response.json({ error: String(error) }, { status: 500 })
           }
@@ -94,8 +124,8 @@ export const Route = createFileRoute('/api/metrics/$')({
 
         if (path === 'gateway-restart') {
           try {
-            const result = await openclaw.restartGateway()
-            return Response.json(result)
+            const result = await openclaw.sendToMainSession('Restart the gateway now. Use the gateway restart tool.')
+            return Response.json({ ok: true })
           } catch (error) {
             return Response.json({ error: String(error) }, { status: 500 })
           }

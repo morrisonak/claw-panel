@@ -84,75 +84,83 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const isDashboard = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard');
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <nav className="border-b relative">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <Link
-              to="/"
-              className="font-bold text-lg hover:text-primary"
-              activeProps={{ className: 'text-primary' }}
-              activeOptions={{ exact: true }}
-            >
-              MetaV Advisors
-            </Link>
-            <div className="hidden md:flex gap-6 text-sm">
+        {!isDashboard && (
+          <nav className="border-b relative">
+            <div className="container mx-auto px-4 py-4 flex items-center justify-between">
               <Link
-                to="/services"
-                className="hover:text-primary"
+                to="/"
+                className="font-bold text-lg hover:text-primary"
                 activeProps={{ className: 'text-primary' }}
+                activeOptions={{ exact: true }}
               >
-                Services
+                MetaV Advisors
               </Link>
-              <Link
-                to="/roi-calculator"
-                className="hover:text-primary"
-                activeProps={{ className: 'text-primary' }}
-              >
-                ROI Calculator
-              </Link>
-              <Link
-                to="/about"
-                className="hover:text-primary"
-                activeProps={{ className: 'text-primary' }}
-              >
-                About
-              </Link>
-              <Link
-                to="/contact"
-                className="hover:text-primary"
-                activeProps={{ className: 'text-primary' }}
-              >
-                Contact
-              </Link>
-              <Link
-                to="/marketing-plan"
-                className="hover:text-primary"
-                activeProps={{ className: 'text-primary' }}
-              >
-                Marketing Plan
-              </Link>
-              <Link
-                to="/business-plan"
-                className="hover:text-primary"
-                activeProps={{ className: 'text-primary' }}
-              >
-                Business Plan
-              </Link>
+              <div className="hidden md:flex gap-6 text-sm">
+                <Link
+                  to="/services"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  Services
+                </Link>
+                <Link
+                  to="/roi-calculator"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  ROI Calculator
+                </Link>
+                <Link
+                  to="/about"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  About
+                </Link>
+                <Link
+                  to="/contact"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  Contact
+                </Link>
+                <Link
+                  to="/marketing-plan"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  Marketing Plan
+                </Link>
+                <Link
+                  to="/business-plan"
+                  className="hover:text-primary"
+                  activeProps={{ className: 'text-primary' }}
+                >
+                  Business Plan
+                </Link>
+              </div>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <MobileNav />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <MobileNav />
-            </div>
-          </div>
-        </nav>
-        <main className="container mx-auto px-4 py-8">
-          {children}
-        </main>
+          </nav>
+        )}
+        {isDashboard ? (
+          children
+        ) : (
+          <main className="container mx-auto px-4 py-8">
+            {children}
+          </main>
+        )}
         <TanStackRouterDevtools position="bottom-right" />
         <Scripts />
       </body>

@@ -1,10 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { getDB } from '~/utils/cloudflare'
+import { requireApiAuth } from '~/server/api-auth'
 
 export const Route = createFileRoute('/api/tasks/$')({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        if (!(await requireApiAuth(request))) {
+          return Response.json({ error: 'Unauthorized' }, { status: 401 })
+        }
         const db = getDB()
         if (!db) {
           return Response.json({ error: 'DB not available' }, { status: 500 })
@@ -34,45 +38,40 @@ export const Route = createFileRoute('/api/tasks/$')({
             return Response.json({ error: 'Title and prompt required' }, { status: 400 })
           }
 
+          // Insert task as pending, then retrieve the generated hex ID
           const now = Math.floor(Date.now() / 1000)
-          const result = await db
+          await db
             .prepare('INSERT INTO tasks (title, description, priority, status, created_at) VALUES (?, ?, ?, ?, ?)')
             .bind(title, prompt, 'medium', 'pending', now)
             .run()
 
-          const taskId = result.meta.last_row_id
+          const row = await db
+            .prepare('SELECT id FROM tasks WHERE title = ? AND created_at = ? ORDER BY rowid DESC LIMIT 1')
+            .bind(title, now)
+            .first() as any
 
-          // Execute task synchronously via chat completions
-          try {
-            const { executeTask } = await import('~/server/openclaw')
-            const { response } = await executeTask(prompt)
-            const completedAt = Math.floor(Date.now() / 1000)
-            await db
-              .prepare('UPDATE tasks SET status = ?, description = ?, completed_at = ? WHERE id = ?')
-              .bind('completed', response, completedAt, taskId)
-              .run()
+          const taskId = row?.id || 'unknown'
 
-            return Response.json({
-              id: taskId,
-              title,
-              status: 'completed',
-              response,
-              created_at: now,
-            })
-          } catch (err: any) {
-            await db
-              .prepare('UPDATE tasks SET status = ?, description = ? WHERE id = ?')
-              .bind('failed', String(err), taskId)
-              .run()
+          // Queue into main agent session (fire-and-forget via waitUntil)
+          const { queueTask } = await import('~/server/openclaw')
+          // Use waitUntil to not block the response
+          const ctx = (request as any).ctx
+          const queuePromise = queueTask(taskId, title, prompt).catch((err: any) => {
+            console.error('Failed to queue task:', err)
+          })
 
-            return Response.json({
-              id: taskId,
-              title,
-              status: 'failed',
-              error: String(err),
-              created_at: now,
-            })
+          if (ctx?.waitUntil) {
+            ctx.waitUntil(queuePromise)
+          } else {
+            await queuePromise
           }
+
+          return Response.json({
+            id: taskId,
+            title,
+            status: 'pending',
+            created_at: now,
+          })
         } catch (error) {
           return Response.json({ error: String(error) }, { status: 500 })
         }

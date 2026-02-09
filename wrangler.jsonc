@@ -36,7 +36,7 @@
 	// Environment variables
 	"vars": {
 		"ENVIRONMENT": "production",
-		"OPENCLAW_URL": "https://openclaw.learnsoaring.com"
+		"OPENCLAW_URL": "http://gw.learnsoaring.com:18789"
 	},
 	// Secrets (set via wrangler secret put)
 	"env": {

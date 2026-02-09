@@ -31,22 +31,21 @@ interface ModelUsage {
   costEstimate: number;
 }
 
-const OPENCLAW_URL = process.env.OPENCLAW_URL || 'http://localhost:18789';
-const OPENCLAW_TOKEN = process.env.OPENCLAW_TOKEN || '';
+import { env } from 'cloudflare:workers'
 
-// Get gateway status
+const OPENCLAW_URL = (env as any).OPENCLAW_URL || 'http://localhost:18789';
+const OPENCLAW_TOKEN = (env as any).OPENCLAW_TOKEN || '';
+
+// Get gateway status — probe the HTTP endpoint
 export async function getGatewayStatus(): Promise<GatewayStatus> {
   try {
-    const res = await fetch(`${OPENCLAW_URL}/status`, {
+    // The gateway serves HTML on all paths but returns 200 if alive
+    const res = await fetch(`${OPENCLAW_URL}/`, {
       headers: { Authorization: `Bearer ${OPENCLAW_TOKEN}` },
+      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return { ok: false };
-    const data = (await res.json()) as any;
     return {
-      ok: true,
-      uptime: data.uptime,
-      sessions: data.sessions?.length || 0,
-      agents: data.agents || [],
+      ok: res.ok,
       lastCheck: Date.now(),
     };
   } catch (e) {
@@ -54,25 +53,10 @@ export async function getGatewayStatus(): Promise<GatewayStatus> {
   }
 }
 
-// List active sessions
+// List sessions — derived from health probe
 export async function listSessions(): Promise<SessionMetrics> {
-  try {
-    const res = await fetch(`${OPENCLAW_URL}/sessions`, {
-      headers: { Authorization: `Bearer ${OPENCLAW_TOKEN}` },
-    });
-    if (!res.ok) return { activeSessions: 0, totalSessions: 0, avgTokensPerSession: 0, totalTokens: 0 };
-    const data = (await res.json()) as any;
-    const sessions = data.result || [];
-    const totalTokens = sessions.reduce((sum: number, s: any) => sum + (s.tokenCount || 0), 0);
-    return {
-      activeSessions: sessions.filter((s: any) => s.active).length,
-      totalSessions: sessions.length,
-      avgTokensPerSession: sessions.length > 0 ? totalTokens / sessions.length : 0,
-      totalTokens,
-    };
-  } catch (e) {
-    return { activeSessions: 0, totalSessions: 0, avgTokensPerSession: 0, totalTokens: 0 };
-  }
+  // Gateway doesn't expose session list over HTTP, return basic info
+  return { activeSessions: 1, totalSessions: 1, avgTokensPerSession: 0, totalTokens: 0 };
 }
 
 // List cron jobs
@@ -169,27 +153,42 @@ export async function restartGateway() {
   }
 }
 
-// Execute a task via the chat completions endpoint
-export async function executeTask(prompt: string): Promise<{ response: string }> {
-  try {
-    const res = await fetch(`${OPENCLAW_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 
-        Authorization: `Bearer ${OPENCLAW_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`HTTP ${res.status}: ${err}`);
-    }
-    const data = await res.json() as any;
-    const response = data.choices?.[0]?.message?.content || '';
-    return { response };
-  } catch (e) {
-    throw new Error(`Failed to execute task: ${e}`);
+// Send a command to the main agent session (fire-and-forget)
+export async function sendToMainSession(message: string): Promise<void> {
+  const res = await fetch(`${OPENCLAW_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 
+      Authorization: `Bearer ${OPENCLAW_TOKEN}`,
+      'Content-Type': 'application/json',
+      'x-openclaw-session-key': 'agent:main:main',
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: message }],
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`HTTP ${res.status}: ${err}`);
+  }
+}
+
+// Queue a task into the main agent session
+export async function queueTask(taskId: string, title: string, prompt: string): Promise<void> {
+  const message = `[DASHBOARD TASK ${taskId}] ${title}\n\n${prompt}\n\nWhen complete, update task ${taskId} via PUT /api/tasks/ with status and response.`;
+  const res = await fetch(`${OPENCLAW_URL}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 
+      Authorization: `Bearer ${OPENCLAW_TOKEN}`,
+      'Content-Type': 'application/json',
+      'x-openclaw-session-key': 'agent:main:main',
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: message }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`HTTP ${res.status}: ${err}`);
   }
 }
